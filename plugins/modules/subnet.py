@@ -289,8 +289,6 @@ def ensure_present(module, client: Client):
 
     # find a match on server, if none, create new object
     items = client.get(ENDPOINT).json
-    # item = get_match(items, "name", module.params["name"])
-    # print(item)
     item = get_complex_match(
         items,
         {"name": module.params["name"], ("vlan", "fabric"): module.params["fabric"]},
