@@ -65,6 +65,12 @@ class MachineNotFound(MaasError):
         super(MachineNotFound, self).__init__(self.message)
 
 
+class DeviceNotFound(MaasError):
+    def __init__(self, data):
+        self.message = "Device - {0} - not found".format(data)
+        super(DeviceNotFound, self).__init__(self.message)
+
+
 class ClusterConnectionNotFound(MaasError):
     def __init__(self, data):
         self.message = "No cluster connection found - {0}".format(data)
