@@ -246,6 +246,8 @@ class IpRangeUpdater:
         IpRangeUpdater.remove_ip_ranges(client, to_delete)
         IpRangeUpdater.add_ip_ranges(client, to_add, subnet["id"])
         result = get_ip_ranges(client).get(subnet["name"])
+        if result is None:
+            return []
         return [v for k, v in result]
 
     @staticmethod
