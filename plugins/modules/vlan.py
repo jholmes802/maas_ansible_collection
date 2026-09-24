@@ -85,6 +85,26 @@ options:
       - Serves as unique identifier of the fabric.
       - If fabric is not found the task will FAIL.
     type: str
+  primary_rack:
+    description:
+      - System ID of the primary rack controller, mutlually exclusive with primary_rack.
+      - Will fail is not found
+    type: str
+  primary_rack_fqdn:
+    description:
+      - FQDN of the primary rack controller, mutlually exclusive with primary_rack.
+      - Will fail is not found
+    type: str
+  secondary_rack:
+    description:
+      - System ID of the secondary rack controller, mutlually exclusive with secondary_rack.
+      - Will fail is not found
+    type: str
+  secondary_rack_fqdn:
+    description:
+      - FQDN of the secondary rack controller, mutlually exclusive with secondary_rack.
+      - Will fail is not found
+    type: str
 """
 
 EXAMPLES = r"""
@@ -165,6 +185,7 @@ from ..module_utils.client import Client
 from ..module_utils.cluster_instance import get_oauth1_client
 from ..module_utils.fabric import Fabric
 from ..module_utils.vlan import Vlan
+from ..module_utils.rack_controller import RackController
 
 
 def data_for_create_vlan(module):
@@ -224,6 +245,14 @@ def data_for_update_vlan(module, vlan):
     ):  # we want a possibility to write empty string to get "undefined" space
         if vlan.space != module.params["space"]:
             data["space"] = module.params["space"]
+    # Handle Primary Rack
+    if module.params["primary_rack"]:
+        if vlan.primary_rack != module.params["primary_rack"]:
+            data["primary_rack"] = module.params["primary_rack"]
+    # Handle Secondary Rack
+    if module.params["secondary_rack"]:
+        if vlan.secondary_rack != module.params["secondary_rack"]:
+            data["secondary_rack"] = module.params["secondary_rack"]
     return data
 
 
@@ -262,12 +291,28 @@ def run(module, client: Client):
         module, client, must_exist=True, name_field_ansible="fabric_name"
     )
     if module.params["state"] == "present":
+        if module.params["dhcp_on"] and (module.params["primary_rack_fqdn"]):
+            primary_rack = RackController.get_by_fqdn(
+                module,
+                client,
+                must_exist=True,
+                name_field_ansible="primary_rack_fqdn",
+            )
+            module.params["primary_rack"] = primary_rack.system_id
+            if module.params["secondary_rack_fqdn"]:
+                secondary_rack = RackController.get_by_fqdn(
+                    module,
+                    client,
+                    must_exist=True,
+                    name_field_ansible="secondary_rack_fqdn",
+                )
+                module.params["secondary_rack"] = secondary_rack.system_id
         if module.params["relay_vid"] and not module.params["relay_vlan"]:
             # If a user has defined the vid but not the relay_vlan, which is the MAAS provided ID, ie 5001, this will fetch it.
-            relay_fabric_id: Fabric = Fabric.get_by_name(
+            relay_fabric_id = Fabric.get_by_name(
                 module, client, must_exist=True, name_field_ansible="relay_fabric"
             )
-            relay_vlan_id: Vlan = Vlan.get_by_vid(
+            relay_vlan_id = Vlan.get_by_vid(
                 module.params["relay_vid"], client, relay_fabric_id.id, must_exist=True
             )
             module.params["relay_vlan"] = relay_vlan_id.id
@@ -301,6 +346,10 @@ def main():
             mtu=dict(type="int"),
             dhcp_on=dict(type="bool"),
             space=dict(type="str"),
+            primary_rack_fqdn=dict(type="str"),
+            primary_rack=dict(type="str"),
+            secondary_rack_fqdn=dict(type="str"),
+            secondary_rack=dict(type="str"),
             relay_vlan=dict(type="int"),
             relay_fabric=dict(type="str"),
             relay_vid=dict(type="int"),
@@ -311,8 +360,11 @@ def main():
         required_together=[
             ("relay_vid", "relay_fabric"),
         ],
+        required_if=[("dhcp_on", True, ("primary_rack", "primary_rack_fqdn"), True)],
         mutually_exclusive=[
             ("relay_vid", "relay_vlan"),
+            ("primary_rack", "primary_rack_fqdn"),
+            ("secondary_rack", "secondary_rack_fqdn"),
         ],
     )
 
