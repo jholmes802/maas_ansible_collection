@@ -191,12 +191,12 @@ def map_item(module, client: Client, fail_if_empty, key, endpoint):
 
 def get_ip_ranges(client):
     def key_function(item):
-        return item["subnet"]
+        return item["subnet"]["id"]
 
     ip_ranges = client.get("/api/2.0/ipranges/").json
     data = [
         {
-            "subnet": ip_range["subnet"]["name"],
+            "subnet": ip_range["subnet"],
             "id": ip_range["id"],
             "data": {
                 "type": ip_range["type"],
@@ -225,7 +225,7 @@ class IpRangeUpdater:
         ranges_to_delete = []
         ranges_to_add = []
 
-        old_ranges = get_ip_ranges(client).get(subnet["name"]) or []
+        old_ranges = get_ip_ranges(client).get(subnet["id"]) or []
 
         for ip_range_id, data in old_ranges:
             if any(ip_range == data for ip_range in ip_ranges):
@@ -245,7 +245,9 @@ class IpRangeUpdater:
         to_delete, to_add = actions
         IpRangeUpdater.remove_ip_ranges(client, to_delete)
         IpRangeUpdater.add_ip_ranges(client, to_add, subnet["id"])
-        result = get_ip_ranges(client).get(subnet["name"])
+        result = get_ip_ranges(client).get(subnet["id"])
+        if result is None:
+            return []
         return [v for k, v in result]
 
     @staticmethod
