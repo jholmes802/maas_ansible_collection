@@ -5,14 +5,14 @@
 
 from __future__ import absolute_import, division, print_function
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from ..module_utils import errors
 
 __metaclass__ = type
 
 
-class MaasValueMapper:
+class MaasValueMapper(ABC):
     """
     Represent abstract class.
     """
@@ -54,6 +54,23 @@ class MaasValueMapper:
         """
         pass
 
+    def payload_for_create(self):
+        """
+        Generates the payload to run create api calls
+        :return: maas-native dictionary.
+        """
+        return self.to_maas()
+
+    def payload_for_update(self):
+        """
+        Generates the payload to run update api calls
+        :return: maas-native dictionary.
+        """
+        return self.to_maas()
+
+    def __eq__(self, other):
+        return self.to_ansible() == other.to_ansible()
+
 
 def filter_dict(input, *field_names):
     output = {}
@@ -77,9 +94,7 @@ def is_superset(superset, subset):
 
 
 def filter_results(results, filter_data):
-    return [
-        element for element in results if is_superset(element, filter_data)
-    ]
+    return [element for element in results if is_superset(element, filter_data)]
 
 
 def get_query(module, *field_names, ansible_maas_map):
@@ -116,3 +131,44 @@ def required_one_of(module, option, list_suboptions):
     raise errors.MaasError(
         f"{option}: at least one of the options is required: {list_suboptions}"
     )
+
+
+def clean_data(data: dict):
+    return {key: value for key, value in data.items() if value is not None}
+
+
+def get_match(items, key, value):
+    return next((item for item in items if item.get(key) == value), None)
+
+
+def must_update(old_data, new_data) -> bool:
+    return any(old_data.get(key) != value for key, value in new_data.items())
+
+
+def get_match_or_fail(items, key, value, attribute_name):
+    result = get_match(items, key, value)
+    if result:
+        return result
+
+    available_items = ", ".join(x[key] for x in items)
+    raise errors.MaasError(
+        f"Can not find matching {attribute_name}. Options are [{available_items}]"
+    )
+
+
+def get_complex_match(items, conditions: dict):
+    for item in items:
+        complex_conditions = {
+            k: v for k, v in conditions.items() if not isinstance(k, str)
+        }
+
+        is_simple_match = all(
+            item[k] == v for k, v in conditions.items() if k not in complex_conditions
+        )
+        is_complex_match = all(
+            item[k1][k2] == v for (k1, k2), v in complex_conditions.items()
+        )
+        if is_simple_match and is_complex_match:
+            return item
+
+    return None
