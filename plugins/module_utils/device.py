@@ -32,6 +32,7 @@ class Device(MaasValueMapper):
         description=None,
         parent=None,
         tags=None,
+        mac_address=None,
         network_interfaces=None,
     ):
         self.fqdn = fqdn
@@ -42,6 +43,7 @@ class Device(MaasValueMapper):
         self.description = description
         self.parent = parent
         self.tags = tags
+        self.mac_address = mac_address
         self.network_interfaces = network_interfaces
 
     @classmethod
@@ -138,6 +140,7 @@ class Device(MaasValueMapper):
         obj.description = module.params.get("description")
         obj.parent = module.params.get("parent")
         obj.tags = module.params.get("tags")
+        obj.mac_address = module.params.get("mac_address")
         obj.network_interfaces = [
             NetworkInterface.from_ansible(net_interface)
             for net_interface in module.params.get("network_interfaces") or []
@@ -151,8 +154,8 @@ class Device(MaasValueMapper):
             obj.fqdn = maas_dict["fqdn"]
             obj.hostname = maas_dict["hostname"]
             obj.id = maas_dict["system_id"]
-            obj.zone = maas_dict["zone"]["id"]
-            obj.domain = maas_dict["domain"]["id"]
+            obj.zone = maas_dict["zone"]["name"]
+            obj.domain = maas_dict["domain"]["name"]
             obj.description = maas_dict["description"]
             obj.parent = maas_dict["parent"]
             obj.tags = maas_dict["tag_names"]
@@ -167,26 +170,28 @@ class Device(MaasValueMapper):
 
     def to_maas(self):
         to_maas_dict = {}
-        if self.fqdn:
-            to_maas_dict["fqdn"] = self.fqdn
-        if self.hostname:
-            to_maas_dict["hostname"] = self.hostname
         if self.id:
             to_maas_dict["id"] = self.id
-        if self.zone:
-            to_maas_dict["zone"] = self.zone
-        if self.domain:
-            to_maas_dict["domain"] = self.domain
+        if self.hostname:
+            to_maas_dict["hostname"] = self.hostname
         if self.description:
             to_maas_dict["description"] = self.description
+        if self.domain:
+            to_maas_dict["domain"] = self.domain
+        if self.mac_address:
+            to_maas_dict["mac_address"] = self.mac_address
         if self.parent:
             to_maas_dict["parent"] = self.parent
+        if self.zone:
+            to_maas_dict["zone"] = self.zone
         if self.tags:
             to_maas_dict["tags"] = self.tags
         if self.network_interfaces:
             to_maas_dict["interfaces"] = [
                 net_interface.to_maas() for net_interface in self.network_interfaces
             ]
+        if self.tags:
+            to_maas_dict["tags"] = self.tags
         return to_maas_dict
 
     def to_ansible(self):
@@ -204,6 +209,22 @@ class Device(MaasValueMapper):
                 for net_interface in self.network_interfaces or []
             ],
         )
+
+    def payload_for_create(self):
+        payload = self.to_maas()
+        mac_address = payload.pop("mac_address", None)
+        payload["mac_addresses"] = mac_address
+        payload.pop("interfaces", None)
+        payload.pop("zone", None)
+        payload.pop("tags", None)
+        return payload
+
+    def payload_for_update(self):
+        payload = self.to_maas()
+        payload.pop("interfaces", None)
+        payload.pop("tags", None)
+        payload.pop("mac_address", None)
+        return payload
 
     def payload_for_compose(self, module):
         payload = self.to_maas()
@@ -252,18 +273,18 @@ class Device(MaasValueMapper):
                 self.domain == other.domain,
                 self.description == other.description,
                 self.parent == other.parent,
-                self.tags == other.tags,
-                self.network_interfaces == other.network_interfaces,
             )
         )
 
     def delete(self, client):
         client.delete(f"{ENDPOINT}{self.id}/")
 
-    @classmethod
-    def create(cls, client, payload):
+    def create(self, client):
+        payload = self.payload_for_create()
         maas_dict = client.post(ENDPOINT, data=payload, timeout=60).json
-        return cls.from_maas(maas_dict)
+        return self.from_maas(maas_dict)
 
-    def update(self, client, payload):
-        return client.put(f"{ENDPOINT}{self.id}/", data=payload).json
+    def update(self, client):
+        payload = self.payload_for_update()
+        maas_dict = client.put(f"{ENDPOINT}{self.id}/", data=payload).json
+        return self.from_maas(maas_dict)

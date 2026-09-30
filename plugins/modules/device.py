@@ -159,76 +159,39 @@ from ..module_utils.device import Device
 from ..module_utils.utils import clean_data, get_match, must_update
 
 
-def data_for_add(module):
-    data = {}
-    data["mac_addresses"] = module.params["mac_address"]  # required
-    if module.params["hostname"]:
-        data["hostname"] = module.params["hostname"]
-    if module.params["description"]:
-        data["description"] = module.params["description"]
-    if module.params["domain"]:
-        data["domain"] = module.params["domain"]
-    if module.params["parent"]:
-        data["parent"] = module.params["parent"]
-    return data
-
-
-def data_for_update(module, device):
-    data = {}
-    if module.params["hostname"]:
-        if device.hostname != module.params["hostname"]:
-            data["hostname"] = module.params["hostname"]
-    if module.params["zone"]:
-        if device.zone != module.params["zone"]:
-            data["zone"] = module.params["zone"]
-    if module.params["domain"]:
-        if device.domain != module.params["domain"]:
-            data["domain"] = module.params["domain"]
-    if module.params["description"]:
-        if device.description != module.params["description"]:
-            data["description"] = module.params["description"]
-    if module.params["parent"]:
-        if device.parent != module.params["parent"]:
-            data["parent"] = module.params["parent"]
-    return data
-
-
 def ensure_present(module, client: Client):
     # extract all data from ansible task
     fqdn = module.params["fqdn"]
 
     changed: bool = False
     before = {}
-
-    # Setup Add Data
-    add_data = data_for_add(module)
-    cleaned_add_data = clean_data(add_data)
+    item_from_ansible = Device.from_ansible(module)
 
     # find a match on server, if none, create new object
-    item = Device.get_by_fqdn(module, client, fqdn)
-    if not item:
-        response_json = create(client, cleaned_add_data)
-        item = response_json  # Set this so update check below can handle any missing things
+    item_from_maas = Device.get_by_fqdn(module, client)
+    if not item_from_maas:
+        response_json = item_from_ansible.create(client)
+        item_from_maas = response_json  # Set this so update check below can handle any missing things
         changed = True
 
     # Set ID
-    id = item.get("id")
-
-    # Gather Update Data
-    update_data = data_for_update(module, item)
-    cleaned_update_data = clean_data(update_data)
+    id = item_from_maas.id
 
     # check if update is needed at all
-    item_changed = must_update(item, cleaned_update_data)
+    item_changed = item_from_ansible == item_from_maas
 
     # update object
     if item_changed:
-        response_json = update(client, cleaned_update_data, id)
-        before = item
+        response_json = item_from_mass.update(client)
+        before = item_from_maas.to_ansible()
     else:
-        response_json = item
+        response_json = item_from_maas
 
-    return changed, item, dict(before=before, after=response_json)
+    return (
+        changed,
+        item_from_maas.to_ansible(),
+        dict(before=before, after=response_json.to_ansible()),
+    )
 
 
 def ensure_absent(module, client: Client):
