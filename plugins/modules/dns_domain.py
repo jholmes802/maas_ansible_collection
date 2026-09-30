@@ -167,7 +167,7 @@ def main():
             name=dict(type="str", required=True),
             ttl=dict(type="int", required=False),
             authoritative=dict(type="bool", required=False),
-            is_default=dict(type="bool", required=False, choices=[True]),
+            is_default=dict(type="bool", required=False, choices=[True, False]),
         ),
     )
 
