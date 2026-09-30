@@ -28,6 +28,24 @@ class RackController(MaasValueMapper):
         self.zone = zone
         self.system_id = system_id
         self.resource_uri = resource_uri
+        self.endpoint = "/api/2.0/rackcontrollers"
+
+    @classmethod
+    def get_by_id(
+        cls,
+        id,
+        client: Client,
+        must_exist=True,
+    ):
+        result = cls()
+        rest_client = RestClient(client=client)
+        maas_dict = rest_client.get_record(
+            f"{result.endpoint}/{id}",
+            must_exist=must_exist,
+        )
+        if maas_dict:
+            rackcontrollers_from_maas = cls.from_maas(maas_dict)
+            return rackcontrollers_from_maas
 
     @classmethod
     def get_by_fqdn(
