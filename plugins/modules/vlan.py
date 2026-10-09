@@ -43,6 +43,10 @@ options:
       - Required when creating new VLAN.
       - Serves as unique identifier of VLAN to be updated.
     type: int
+  new_vid:
+    description:
+      - The new traffic segregation ID for the new VLAN.
+    type: int
   vlan_name:
     description:
       - The name of the new VLAN to be created. This is computed if it's not set.
@@ -221,9 +225,15 @@ def create_vlan(module, client: Client, fabric_id):
 
 def data_for_update_vlan(module, vlan):
     data = {}
+    if module.params["vlan_name"]:
+        if vlan.name != module.params["vlan_name"]:
+            data["name"] = module.params["vlan_name"]
     if module.params["new_vlan_name"]:
         if vlan.name != module.params["new_vlan_name"]:
             data["name"] = module.params["new_vlan_name"]
+    if module.params["new_vid"]:
+        if vlan.vid != module.params["new_vid"]:
+            data["vid"] = module.params["new_vid"]
     if module.params["description"]:  # description is not returned
         data["description"] = module.params["description"]
     if module.params["mtu"]:
@@ -316,7 +326,7 @@ def run(module, client: Client):
                 module.params["relay_vid"], client, relay_fabric_id.id, must_exist=True
             )
             module.params["relay_vlan"] = relay_vlan_id.id
-        if not module.params["vid"]:
+        if module.params["vid"] is None:
             vlan = Vlan.get_by_name(module, client, fabric.id, must_exist=True)
             return update_vlan(module, client, vlan)
         else:
@@ -340,6 +350,7 @@ def main():
             ),
             fabric_name=dict(type="str", required=True),
             vid=dict(type="int"),
+            new_vid=dict(type="int"),
             vlan_name=dict(type="str"),
             new_vlan_name=dict(type="str"),
             description=dict(type="str"),
