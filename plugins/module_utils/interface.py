@@ -32,6 +32,7 @@ class Interface(MaasValueMapper):
         mtu=None,  # Interface MTU, default 1500
         tags=None,  # Tags for interface, list of strings
         ip_address=None,  # IP Address V4 for interface
+        default_gateway=None,  # Boolean is default gateway
         mode=None,  # Mode of interface, STATIC, Auto etc
         connected=None,  # If the interface is connected
         bond=None,  # Specific Bond Settings
@@ -51,6 +52,7 @@ class Interface(MaasValueMapper):
         self.mtu = mtu
         self.tags = tags
         self.ip_address = ip_address
+        self.default_gateway = default_gateway
         self.mode = mode
         self.connected = connected
         self.bond = bond
@@ -69,6 +71,7 @@ class Interface(MaasValueMapper):
         obj.mtu = module.get("mtu")
         obj.tags = module.get("tags", [])
         obj.ip_address = module.get("ip_address")
+        obj.default_gateway = module.get("default_gateway")
         obj.mode = module.get("mode")
         obj.bond = module.get("bond")
         obj.bridge = module.get("bridge")
@@ -130,9 +133,6 @@ class Interface(MaasValueMapper):
             to_maas_dict["id"] = self.id
         if self.name:
             to_maas_dict["name"] = self.name
-        # FIXME: Doesn't seem like MAAS Api supports updating with subnet_cidr
-        if self.subnet_cidr:
-            to_maas_dict["subnet_cidr"] = self.subnet_cidr
         if self.mac_address:
             to_maas_dict["mac_address"] = self.mac_address
         if self.vlan_id:
@@ -143,14 +143,10 @@ class Interface(MaasValueMapper):
             to_maas_dict["tags"] = ",".join(self.tags)
         if self.ip_address:
             to_maas_dict["ip_address"] = self.ip_address
-        # FIXME: This isn't in the MAAS API v2 spec for update or create of interfaces
-        if self.fabric:
-            to_maas_dict["fabric"] = self.fabric
-        # FIXME: Not seeing a 'mode' field in the MAAS Update API
         if self.mode:
             to_maas_dict["mode"] = self.mode
         # FIXME: This is only set through a specific query
-        # if self.default_gateway:
+        # if self.default_gateway and self.mode in ["AUTO", "STATIC"]:
         #     to_maas_dict["default_gateway"] = self.default_gateway
 
         return to_maas_dict
@@ -189,6 +185,7 @@ class Interface(MaasValueMapper):
         for subnet in results:
             if subnet["cidr"] == cidr:
                 return subnet
+        raise ValueError(f"Subnet with {cidr} not found")
 
     def needs_update(self, new_nic):
         new_nic_dict = new_nic.to_maas()
@@ -203,7 +200,7 @@ class Interface(MaasValueMapper):
     def alias_needs_update(client, existing_alias, module):
         # Gateway can only be changed in STATIC or AUTO mode.
         # Ip_address can only be changed in STATIC mode.
-        subnet = Interface.find_subnet_by_cidr(client, module.params["subnet"])
+        subnet = Interface.find_subnet_by_cidr(client, module.params["subnet_cidr"])
         if (
             module.params["mode"]
             and existing_alias["mode"].lower() != module.params["mode"].lower()
@@ -244,11 +241,11 @@ class Interface(MaasValueMapper):
 
     def payload_for_link_subnet(self, client):
         payload = self.to_maas()
-        subnet = Interface.find_subnet_by_cidr(client, payload["subnet_cidr"])
-        if subnet.get("vlan", {}).get("fabric") != self.fabric:
-            raise errors.MaasError(
-                f"subnet - {payload['subnet_cidr']} does not have the same fabric. Try another subnet or change fabric."
-            )
+        subnet = Interface.find_subnet_by_cidr(client, self.subnet_cidr)
+        # if subnet["vlan"]["fabric"] != self.fabric:
+        #     raise errors.MaasError(
+        #         f"subnet - {payload['subnet_cidr']} does not have the same fabric. Try another subnet or change fabric."
+        #     )
         payload["subnet"] = subnet["id"]
         return payload
 
