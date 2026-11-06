@@ -58,7 +58,7 @@ class NetworkInterface(MaasValueMapper):
     @classmethod
     def from_ansible(cls, module):
         obj = NetworkInterface()
-        obj.name = module.get("name", module.get("network_interface"))
+        obj.name = module.get("name")
         obj.subnet_cidr = module.get("subnet_cidr", module.get("subnet"))
         obj.ip_address = module.get("ip_address")
         obj.fabric = module.get("fabric")
@@ -89,27 +89,14 @@ class NetworkInterface(MaasValueMapper):
             if maas_dict.get("discovered"):  # Auto assigned IP
                 obj.ip_address = maas_dict["discovered"][0].get("ip_address")
                 obj.ip_address = maas_dict["discovered"][0].get("mac_address")
-                obj.subnet_cidr = maas_dict["discovered"][0]["subnet"].get(
-                    "cidr"
-                )
-                obj.vlan = maas_dict["discovered"][0]["subnet"]["vlan"].get(
-                    "id"
-                )
-                obj.fabric = maas_dict["discovered"][0]["subnet"]["vlan"].get(
-                    "fabric"
-                )
-            elif (
-                maas_dict.get("links") and len(maas_dict["links"]) > 0
-            ):  # Static IP
+                obj.subnet_cidr = maas_dict["discovered"][0]["subnet"].get("cidr")
+                obj.vlan = maas_dict["discovered"][0]["subnet"]["vlan"].get("id")
+                obj.fabric = maas_dict["discovered"][0]["subnet"]["vlan"].get("fabric")
+            elif maas_dict.get("links") and len(maas_dict["links"]) > 0:  # Static IP
                 obj.ip_address = maas_dict["links"][0].get("ip_address")
-                obj.subnet_cidr = (
-                    maas_dict["links"][0].get("subnet", {}).get("cidr")
-                )
+                obj.subnet_cidr = maas_dict["links"][0].get("subnet", {}).get("cidr")
                 obj.vlan = (
-                    maas_dict["links"][0]
-                    .get("subnet", {})
-                    .get("vlan", {})
-                    .get("id")
+                    maas_dict["links"][0].get("subnet", {}).get("vlan", {}).get("id")
                 )
                 obj.fabric = (
                     maas_dict["links"][0]
@@ -200,9 +187,7 @@ class NetworkInterface(MaasValueMapper):
     def alias_needs_update(client, existing_alias, module):
         # Gateway can only be changed in STATIC or AUTO mode.
         # Ip_address can only be changed in STATIC mode.
-        subnet = NetworkInterface.find_subnet_by_cidr(
-            client, module.params["subnet"]
-        )
+        subnet = NetworkInterface.find_subnet_by_cidr(client, module.params["subnet"])
         if (
             module.params["mode"]
             and existing_alias["mode"].lower() != module.params["mode"].lower()
@@ -215,10 +200,7 @@ class NetworkInterface(MaasValueMapper):
         ):
             return True
         if (
-            (
-                module.params["mode"] == "STATIC"
-                or module.params["mode"] == "AUTO"
-            )
+            (module.params["mode"] == "STATIC" or module.params["mode"] == "AUTO")
             and module.params["default_gateway"]
             and existing_alias["gateway_ip"] != subnet["gateway_ip"]
         ):
@@ -238,9 +220,9 @@ class NetworkInterface(MaasValueMapper):
     def payload_for_create(self):
         return self.to_maas()
 
-    def send_create_request(self, client, machine_obj, payload):
+    def send_create_request(self, client, node_obj, payload):
         results = client.post(
-            f"/api/2.0/nodes/{machine_obj.id}/interfaces/",
+            f"/api/2.0/nodes/{node_obj.id}/interfaces/",
             query={"op": "create_physical"},
             data=payload,
         ).json
@@ -252,9 +234,7 @@ class NetworkInterface(MaasValueMapper):
 
     def payload_for_link_subnet(self, client, fabric):
         payload = self.to_maas()
-        subnet = NetworkInterface.find_subnet_by_cidr(
-            client, payload["subnet_cidr"]
-        )
+        subnet = NetworkInterface.find_subnet_by_cidr(client, payload["subnet_cidr"])
         if subnet.get("vlan", {}).get("fabric") != fabric:
             raise errors.MaasError(
                 f"subnet - {payload['subnet_cidr']} does not have the same fabric. Try another subnet or change fabric."
@@ -270,9 +250,7 @@ class NetworkInterface(MaasValueMapper):
         ).json
         return results
 
-    def send_unlink_subnet_request(
-        self, client, machine_obj, linked_subnet_id
-    ):
+    def send_unlink_subnet_request(self, client, machine_obj, linked_subnet_id):
         results = client.post(
             f"/api/2.0/nodes/{machine_obj.id}/interfaces/{self.id}/",
             query={"op": "unlink_subnet"},

@@ -109,10 +109,10 @@ def run(module, client: Client):
     fabric = Fabric.get_by_name(
         module, client, must_exist=True, name_field_ansible="fabric_name"
     )
-    if module.params["vid"]:
+    if module.params["vid"] is not None:
         vlan = Vlan.get_by_vid(module, client, fabric.id, must_exist=True)
         response = [vlan.to_ansible()]
-    elif module.params["vlan_name"]:
+    elif module.params["vlan_name"] is not None:
         vlan = Vlan.get_by_name(module, client, fabric.id, must_exist=True)
         response = [vlan.to_ansible()]
     else:
