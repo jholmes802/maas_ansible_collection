@@ -121,6 +121,8 @@ record:
     ttl: null
 """
 
+import ipaddress
+
 from itertools import groupby
 
 from ansible.module_utils.basic import AnsibleModule
@@ -158,9 +160,7 @@ def get_complex_match(items, conditions: dict):
         }
 
         is_simple_match = all(
-            item[k] == v
-            for k, v in conditions.items()
-            if k not in complex_conditions
+            item[k] == v for k, v in conditions.items() if k not in complex_conditions
         )
         is_complex_match = all(
             item[k1][k2] == v for (k1, k2), v in complex_conditions.items()
@@ -265,6 +265,9 @@ class IpRangeUpdater:
 def ensure_present(module, client: Client):
     vlan_name = module.params["vlan"]
     ip_ranges = module.params["ip_ranges"] or []
+    module.params["cidr"] = str(
+        ipaddress.ip_network(module.params["cidr"], strict=False)
+    )
 
     fabric = map_item(
         module, client, vlan_name is not None, "fabric", "/api/2.0/fabrics/"
@@ -293,7 +296,7 @@ def ensure_present(module, client: Client):
     items = client.get(ENDPOINT).json
     item = get_complex_match(
         items,
-        {"name": module.params["name"], ("vlan", "fabric"): module.params["fabric"]},
+        {"cidr": module.params["cidr"], ("vlan", "fabric"): module.params["fabric"]},
     )
     if not item:
         response_json = client.post(ENDPOINT, cleaned_data).json
@@ -370,17 +373,13 @@ def main():
         end_ip=dict(type="str", required=True),
     )
 
-    ip_range_list_spec = dict(
-        type="list", elements="dict", options=ip_range_spec
-    )
+    ip_range_list_spec = dict(type="list", elements="dict", options=ip_range_spec)
 
     module = AnsibleModule(
         supports_check_mode=False,
         argument_spec=dict(
             arguments.get_spec("cluster_instance"),
-            state=dict(
-                type="str", required=True, choices=["present", "absent"]
-            ),
+            state=dict(type="str", required=True, choices=["present", "absent"]),
             name=dict(type="str", required=True),
             cidr=dict(type="str"),
             fabric=dict(type="str"),

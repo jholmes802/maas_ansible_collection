@@ -194,12 +194,19 @@ def ensure_present(module, client, node_obj: Node):
         updated_nic_obj = updated_node_obj.find_nic_by_name(new_nic_obj.name)
         after = updated_nic_obj.find_linked_alias_by_cidr(module)
     elif not existing_linked_alias:
-        new_nic_obj.send_link_subnet_request(
-            client,
-            node_obj,
-            new_nic_obj.payload_for_link_subnet(client, existing_nic_obj.fabric),
-            existing_nic_obj.id,
-        )
+        new_nic_obj.id = existing_nic_obj.id
+        new_nic_obj.node_id = existing_nic_obj.node_id
+
+        try:
+            new_nic_obj.send_link_subnet_request(
+                client,
+                new_nic_obj.payload_for_link_subnet(client),
+            )
+        except Exception as e:
+            raise errors.MaasError(
+                f"Something went wrong: {new_nic_obj.payload_for_link_subnet(client)}"
+            )
+
         updated_node_obj = Node.get_by_fqdn(
             module, client, must_exist=True, name_field_ansible="fqdn"
         )
